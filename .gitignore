@@ -1,0 +1,5 @@
+dist/
+.cache/
+.DS_Store
+__pycache__/
+apps-worktree/

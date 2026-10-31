@@ -1,0 +1,11 @@
+[nemesis]
+version=@VERSION@
+id=cabinwright.smarttube
+name=SmartTube
+types=application
+
+[app.0]
+kind=apk
+path=smarttube.apk
+package=org.smarttube.stable
+component=org.smarttube.stable/com.liskovsoft.smartyoutubetv2.tv.ui.main.SplashActivity
