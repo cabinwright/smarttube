@@ -51,17 +51,37 @@ Patches (each fails loudly if SmartTube changed underneath it):
      with mode 130, setMute(3) (also when focus comes back, since every mode
      change mutes), every track on session 29. The audio focus setting is
      forced on, since turning it off would leave SmartTube silent.
- 10. Status bar: the head unit's back and home buttons live in its status bar,
-     which SmartTube hides twice: android:windowFullscreen in four themes, and
-     Helpers.makeActivityFullscreen2 (system UI flags). Both go, so every
-     screen, the player included, sits under the bar like any other app.
+ 10. Status bar on every screen but the player: the head unit's back and home
+     live in its status bar, which SmartTube hides with android:windowFullscreen
+     in its themes and with Helpers.makeActivityFullscreen2. Browse, search,
+     sign-in and settings keep the bar. The player stays fullscreen, so patch 13
+     gives it its own exit.
  11. Start sooner on a slow connection: playback starts with 1.5 s buffered
      instead of 2.5 s, 3 s instead of 5 s after a stall, and the Medium buffer,
      the default, is 15 s instead of 30 s. The buffer setting still offers
      High and Highest. The video default is left alone: on API 19 it is
      already 640x360 H.264.
- 12. The search box opens the keyboard when it gets focus, by default. Still a
-     setting. Sign-in needs no keyboard: it shows a code to enter on a phone.
+ 12. Search keyboard. The search box opens the keyboard when it gets focus, by
+     default (still a setting). The stock keyboard crashes in onStartInputView
+     for this box, so the box asks for a plain text field: inputType text,
+     imeOptions actionSearch without flagNoExtractUi. Whether that is what the
+     keyboard trips on isn't known yet; see the README. Sign-in needs no
+     keyboard: it shows a code to enter on a phone.
+ 13. Close button: the first action in the player's controls leaves the video,
+     the same way back does. Any touch brings the controls up
+     (PlaybackActivity.dispatchTouchEvent), so it can't be stranded. Its icon is
+     ic_close; the day variant is black, so the night variant's white PNGs
+     replace it. Nothing else in SmartTube uses that drawable.
+ 14. Unmute after the mode change, not only before it. The focus grant returns
+     before ModeManager changes mode, and that change mutes AV. An unmute that
+     arrives during the change is held and sent when it ends, but one that
+     arrives first is lost, and the source stays silent. CarSource unmutes again
+     at 0.3, 0.8 and 1.8 s, and stops on a loss of focus or an abandon.
+ 15. All Menus: the activity the package opens (SplashActivity) gets a MAIN +
+     app.cabinwright.category.ALL_MENUS filter, beside its launcher one, and the
+     menu's meta-data. The icons are package/menu-res, made from
+     package/glyph.svgpath with the SDK's menu_icon.py, in the stock 99x99 style;
+     without them the menu would fall back to the 320x320 app icon.
 """
 import re
 import sys
@@ -484,8 +504,12 @@ CAR_SOURCE = """.class public Lapp/cabinwright/smarttube/CarSource;
 .super Ljava/lang/Object;
 .source "CarSource.java"
 
+.implements Ljava/lang/Runnable;
+
 
 .field private static sContext:Landroid/content/Context;
+
+.field private static sHandler:Landroid/os/Handler;
 
 
 .method public constructor <init>()V
@@ -498,13 +522,61 @@ CAR_SOURCE = """.class public Lapp/cabinwright/smarttube/CarSource;
 
 # From AudioFocusManager's constructor: MicomAudioManager needs a Context.
 .method public static init(Landroid/content/Context;)V
-    .locals 1
+    .locals 2
 
     invoke-virtual {p0}, Landroid/content/Context;->getApplicationContext()Landroid/content/Context;
 
     move-result-object v0
 
     sput-object v0, Lapp/cabinwright/smarttube/CarSource;->sContext:Landroid/content/Context;
+
+    new-instance v0, Landroid/os/Handler;
+
+    invoke-static {}, Landroid/os/Looper;->getMainLooper()Landroid/os/Looper;
+
+    move-result-object v1
+
+    invoke-direct {v0, v1}, Landroid/os/Handler;-><init>(Landroid/os/Looper;)V
+
+    sput-object v0, Lapp/cabinwright/smarttube/CarSource;->sHandler:Landroid/os/Handler;
+
+    return-void
+.end method
+
+.method public run()V
+    .locals 0
+
+    invoke-static {}, Lapp/cabinwright/smarttube/CarSource;->unmute()V
+
+    return-void
+.end method
+
+# A focus grant returns before ModeManager changes mode, and that change mutes AV
+# (MicomAudioService.setAudioMode -> setMute(2)), so the unmute must also come after.
+.method private static settle()V
+    .locals 5
+
+    sget-object v0, Lapp/cabinwright/smarttube/CarSource;->sHandler:Landroid/os/Handler;
+
+    const/4 v1, 0x0
+
+    invoke-virtual {v0, v1}, Landroid/os/Handler;->removeCallbacksAndMessages(Ljava/lang/Object;)V
+
+    new-instance v1, Lapp/cabinwright/smarttube/CarSource;
+
+    invoke-direct {v1}, Lapp/cabinwright/smarttube/CarSource;-><init>()V
+
+    const-wide/16 v2, 0x12c
+
+    invoke-virtual {v0, v1, v2, v3}, Landroid/os/Handler;->postDelayed(Ljava/lang/Runnable;J)Z
+
+    const-wide/16 v2, 0x320
+
+    invoke-virtual {v0, v1, v2, v3}, Landroid/os/Handler;->postDelayed(Ljava/lang/Runnable;J)Z
+
+    const-wide/16 v2, 0x708
+
+    invoke-virtual {v0, v1, v2, v3}, Landroid/os/Handler;->postDelayed(Ljava/lang/Runnable;J)Z
 
     return-void
 .end method
@@ -547,19 +619,44 @@ CAR_SOURCE = """.class public Lapp/cabinwright/smarttube/CarSource;
 
     invoke-static {}, Lapp/cabinwright/smarttube/CarSource;->unmute()V
 
+    invoke-static {}, Lapp/cabinwright/smarttube/CarSource;->settle()V
+
     :done
     return v0
+.end method
+
+# From AudioFocusManager.abandonAudioFocusDefault: the player stopped. The system gives focus and
+# the mode to whoever held them before (Android Auto does its own unmute), so stop unmuting.
+.method public static cancel()V
+    .locals 2
+
+    sget-object v0, Lapp/cabinwright/smarttube/CarSource;->sHandler:Landroid/os/Handler;
+
+    const/4 v1, 0x0
+
+    invoke-virtual {v0, v1}, Landroid/os/Handler;->removeCallbacksAndMessages(Ljava/lang/Object;)V
+
+    return-void
 .end method
 
 # From AudioFocusListener.onAudioFocusChange: AUDIOFOCUS_GAIN after a call or a navigation prompt.
 .method public static onFocusChange(I)V
     .locals 1
 
+    if-gez p0, :regained
+
+    invoke-static {}, Lapp/cabinwright/smarttube/CarSource;->cancel()V
+
+    return-void
+
+    :regained
     const/4 v0, 0x1
 
     if-ne p0, v0, :done
 
     invoke-static {}, Lapp/cabinwright/smarttube/CarSource;->unmute()V
+
+    invoke-static {}, Lapp/cabinwright/smarttube/CarSource;->settle()V
 
     :done
     return-void
@@ -576,6 +673,10 @@ def patch_car_audio(root: Path) -> None:
     s = p.read_text(encoding="utf-8")
     plain = "invoke-virtual {v0, v1, v2, v3}, Landroid/media/AudioManager;->requestAudioFocus(Landroid/media/AudioManager$OnAudioFocusChangeListener;II)I"
     s = replace_once(s, plain, f"invoke-static {{v0, v1, v2, v3}}, {cls}->requestFocus(Landroid/media/AudioManager;Landroid/media/AudioManager$OnAudioFocusChangeListener;II)I", what)
+    abandon = re.compile(r"(\.method private abandonAudioFocusDefault\(\)V\n    \.(?:locals|registers) \d+\n)")
+    if len(abandon.findall(s)) != 1:
+        raise SystemExit(f"{what}: abandonAudioFocusDefault changed - re-check it")
+    s = abandon.sub(lambda g: g.group(1) + f"\n    invoke-static {{}}, {cls}->cancel()V\n", s)
     ctor = re.compile(r"(\.method public constructor <init>\(Landroid/content/Context;[^\n]*\n    \.(?:locals|registers) \d+\n)")
     if len(ctor.findall(s)) != 1:
         raise SystemExit(f"{what}: AudioFocusManager's constructor changed - re-check it")
@@ -622,7 +723,7 @@ def patch_status_bar(root: Path) -> None:
     changed = set()
 
     def theme(g: "re.Match[str]") -> str:
-        if not g.group("name").startswith("App.Theme.") or full not in g.group(0):
+        if not g.group("name").startswith("App.Theme.") or g.group("name").endswith(".Player") or full not in g.group(0):
             return g.group(0)
         changed.add(g.group("name"))
         return g.group(0).replace(full, off)
@@ -630,15 +731,108 @@ def patch_status_bar(root: Path) -> None:
     for p in sorted(root.glob("res/values*/styles.xml")):
         s = p.read_text(encoding="utf-8")
         p.write_text(style.sub(theme, s), encoding="utf-8")
-    if not {"App.Theme.Leanback.Browse", "App.Theme.Leanback.Player"} <= changed:
-        raise SystemExit(f"{what}: the browse and player themes no longer set windowFullscreen ({sorted(changed)}) - SmartTube changed, re-check it")
+    if "App.Theme.Leanback.Browse" not in changed:
+        raise SystemExit(f"{what}: the browse theme no longer sets windowFullscreen - SmartTube changed, re-check it")
 
     p = smali_file(root, "com/liskovsoft/sharedutils/helpers/Helpers.smali", what)
     s = p.read_text(encoding="utf-8")
-    pat = re.compile(r"(\.method public static makeActivityFullscreen2\(Landroid/app/Activity;\)V\n).*?(\.end method)", re.S)
+    pat = re.compile(r"(\.method public static makeActivityFullscreen2\(Landroid/app/Activity;\)V\n    \.(?:locals|registers) \d+\n)")
     if len(pat.findall(s)) != 1:
         raise SystemExit(f"{what}: makeActivityFullscreen2 not found - SmartTube changed, re-check it")
-    p.write_text(pat.sub(r"\1    .locals 0\n\n    return-void\n\2", s, count=1), encoding="utf-8")
+    only = (
+        "\n    instance-of v0, p0, Lcom/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackActivity;\n\n"
+        "    if-nez v0, :cabinwright_player\n\n    return-void\n\n    :cabinwright_player\n"
+    )
+    p.write_text(pat.sub(lambda g: g.group(1) + only, s, count=1), encoding="utf-8")
+
+
+CLOSE_ACTION = """.class public Lapp/cabinwright/smarttube/CloseAction;
+.super Landroidx/leanback/widget/Action;
+.source "CloseAction.java"
+
+
+# Icon: ic_close, a white PNG on API 19 once patch_close_button has swapped it. That function
+# takes the id from public.xml.
+.method public constructor <init>(Landroid/content/Context;)V
+    .locals 2
+
+    const-wide/32 v0, 0x7f0a0fff
+
+    invoke-direct {p0, v0, v1}, Landroidx/leanback/widget/Action;-><init>(J)V
+
+    const v0, @ICON@
+
+    invoke-static {p1, v0}, Landroidx/core/content/ContextCompat;->getDrawable(Landroid/content/Context;I)Landroid/graphics/drawable/Drawable;
+
+    move-result-object v0
+
+    invoke-virtual {p0, v0}, Landroidx/leanback/widget/Action;->setIcon(Landroid/graphics/drawable/Drawable;)V
+
+    const-string v0, "Close"
+
+    invoke-virtual {p0, v0}, Landroidx/leanback/widget/Action;->setLabel1(Ljava/lang/CharSequence;)V
+
+    return-void
+.end method
+
+# PlaybackActivity.finish() is what back ends in, so the player closes the same way.
+.method public static close(Landroid/content/Context;)V
+    .locals 1
+
+    instance-of v0, p0, Landroid/app/Activity;
+
+    if-eqz v0, :done
+
+    check-cast p0, Landroid/app/Activity;
+
+    invoke-virtual {p0}, Landroid/app/Activity;->finish()V
+
+    :done
+    return-void
+.end method
+"""
+
+
+def patch_close_button(root: Path) -> None:
+    what = "close button patch"
+    cls = "Lapp/cabinwright/smarttube/CloseAction;"
+    glue = "com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.smali"
+    public = (root / "res" / "values" / "public.xml").read_text(encoding="utf-8")
+    m = re.search(r'<public type="drawable" name="ic_close" id="(0x7f[0-9a-f]{6})" />', public)
+    if not m:
+        raise SystemExit(f"{what}: ic_close isn't in public.xml - SmartTube changed, re-check it")
+    icon = m.group(1)
+    p = smali_file(root, glue, what)
+    s = p.read_text(encoding="utf-8")
+    context = "Landroidx/leanback/media/PlaybackGlue;->getContext()Landroid/content/Context;"
+    # .locals from apktool, .registers from baksmali: two free registers in one, one in the other.
+    first = re.compile(r"(\.method protected onCreatePrimaryActions\(Landroidx/leanback/widget/ArrayObjectAdapter;\)V\n    \.(?:locals 2|registers 4)\n)")
+    click = re.compile(r"(\.method public onActionClicked\(Landroidx/leanback/widget/Action;\)V\n    \.(?:locals 1|registers 3)\n)")
+    if len(first.findall(s)) != 1 or len(click.findall(s)) != 1:
+        raise SystemExit(f"{what}: VideoPlayerGlue changed - re-check it")
+    s = first.sub(lambda g: g.group(1) + (
+        f"\n    new-instance v0, {cls}\n\n"
+        f"    invoke-virtual {{p0}}, {context}\n\n    move-result-object v1\n\n"
+        f"    invoke-direct {{v0, v1}}, {cls}-><init>(Landroid/content/Context;)V\n\n"
+        "    invoke-virtual {p1, v0}, Landroidx/leanback/widget/ArrayObjectAdapter;->add(Ljava/lang/Object;)V\n"
+    ), s)
+    s = click.sub(lambda g: g.group(1) + (
+        f"\n    instance-of v0, p1, {cls}\n\n    if-eqz v0, :cabinwright_not_close\n\n"
+        f"    invoke-virtual {{p0}}, {context}\n\n    move-result-object v0\n\n"
+        f"    invoke-static {{v0}}, {cls}->close(Landroid/content/Context;)V\n\n    return-void\n\n"
+        "    :cabinwright_not_close\n"
+    ), s)
+    p.write_text(s, encoding="utf-8")
+    dex_dir = next(d for d in root.glob("smali*") if d in p.parents)
+    source = dex_dir / "app" / "cabinwright" / "smarttube" / "CloseAction.smali"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(CLOSE_ACTION.replace("@ICON@", icon), encoding="utf-8")
+
+    pngs = sorted(root.glob("res/drawable-night-*dpi/ic_close.png"))
+    if not pngs:
+        raise SystemExit(f"{what}: no white ic_close PNGs - SmartTube changed, re-check it")
+    for png in pngs:
+        (root / "res" / png.parent.name.replace("-night", "") / png.name).write_bytes(png.read_bytes())
 
 
 def patch_startup(root: Path) -> None:
@@ -657,6 +851,31 @@ def patch_startup(root: Path) -> None:
     p.write_text(s.replace(body, new, 1), encoding="utf-8")
 
 
+MENU_ENTRY = """
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="app.cabinwright.category.ALL_MENUS"/>
+            </intent-filter>
+            <meta-data android:name="app.cabinwright.icon" android:resource="@drawable/menu_icon"/>
+            <meta-data android:name="app.cabinwright.icon_disabled" android:resource="@drawable/menu_icon_dis"/>
+            <meta-data android:name="app.cabinwright.label" android:resource="@string/app_name"/>"""
+
+
+def patch_menu_entry(root: Path) -> None:
+    what = "menu entry patch"
+    p = root / "AndroidManifest.xml"
+    s = p.read_text(encoding="utf-8")
+    pat = re.compile(r'<activity\b[^>]*android:name="com\.liskovsoft\.smartyoutubetv2\.tv\.ui\.main\.SplashActivity"[^>]*(?<!/)>')
+    if len(pat.findall(s)) != 1:
+        raise SystemExit(f"{what}: SplashActivity not found once - SmartTube changed, re-check it")
+    p.write_text(pat.sub(lambda g: g.group(0) + MENU_ENTRY, s, count=1), encoding="utf-8")
+    icons = Path(__file__).resolve().parent.parent / "package" / "menu-res"
+    for icon in sorted(icons.glob("*/*.png")):
+        out = root / "res" / icon.parent.name / icon.name
+        out.parent.mkdir(exist_ok=True)
+        out.write_bytes(icon.read_bytes())
+
+
 def patch_keyboard_default(root: Path) -> None:
     what = "keyboard default patch"
     p = smali_file(root, "com/liskovsoft/smartyoutubetv2/common/prefs/SearchData.smali", what)
@@ -669,6 +888,12 @@ def patch_keyboard_default(root: Path) -> None:
     if len(pat.findall(s)) != 1:
         raise SystemExit(f"{what}: SearchData's restore changed - re-check it")
     p.write_text(pat.sub(r"\1v2\2", s, count=1), encoding="utf-8")
+
+    p = root / "res" / "layout" / "lb_search_bar.xml"
+    s = p.read_text(encoding="utf-8")
+    s = replace_once(s, 'android:inputType="textAutoComplete"', 'android:inputType="text"', what)
+    s = replace_once(s, 'android:imeOptions="actionSearch|flagNoExtractUi"', 'android:imeOptions="actionSearch"', what)
+    p.write_text(s, encoding="utf-8")
 
 
 def main() -> None:
@@ -685,7 +910,9 @@ def main() -> None:
     patch_status_bar(root)
     patch_startup(root)
     patch_keyboard_default(root)
-    print(f"patched: GET_TASKS, Conscrypt, update check off, versionCode={code}, edge-swipe back (+ relayout fix), driving guard (fails closed), dead codecs, car audio, status bar, startup, keyboard default")
+    patch_close_button(root)
+    patch_menu_entry(root)
+    print(f"patched: GET_TASKS, Conscrypt, update check off, versionCode={code}, edge-swipe back (+ relayout fix), driving guard (fails closed), dead codecs, car audio, status bar outside the player, startup, search keyboard, close button, menu entry")
 
 
 if __name__ == "__main__":

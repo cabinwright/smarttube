@@ -47,10 +47,15 @@ playback failure was found. None of its code or binaries are used here.
 - ExoPlayer's `AudioFocusManager` and `DefaultAudioSink` use a new class,
   `app.cabinwright.smarttube.CarSource`, and the head unit's Music Streaming audio session
 - `PlayerTweaksData.isAudioFocusEnabled()` always returns true
-- the themes no longer set `android:windowFullscreen`, and `Helpers.makeActivityFullscreen2()`
-  does nothing, so the system status bar stays
+- only the player's theme sets `android:windowFullscreen`, and `Helpers.makeActivityFullscreen2()`
+  acts only on the player, so the system status bar stays on other screens
+- `VideoPlayerGlue` has a Close action, `CloseAction`, first in the player's controls, and the
+  white `ic_close` PNGs replace the black ones
+- `CarSource` unmutes again after the head unit's mode change, until focus is lost or abandoned
 - `ExoPlayerInitializer.createLoadControl()` uses shorter buffer durations
-- `SearchData` opens the keyboard on focus by default
+- `SearchData` opens the keyboard on focus by default, and the search box in `lb_search_bar.xml`
+  is a plain text field
+- `SplashActivity` is listed in Cabinwright's All Menus, with icons made for this package
 - re-signed with this project's key
 
 Third-party libraries inside the APK are distributed by upstream under their own licenses,

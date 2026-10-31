@@ -21,7 +21,7 @@ for d in "" 2 3; do
     java -jar "$TOOLS/baksmali-2.5.2.jar" d "$work/dex/classes$d.dex" -o "$work/src/$out"
 done
 mkdir -p "$work/src/res/values"
-echo '<manifest package="org.smarttube.stable">' > "$work/src/AndroidManifest.xml"
+echo '<manifest package="org.smarttube.stable"><activity android:name="com.liskovsoft.smartyoutubetv2.tv.ui.main.SplashActivity"></activity>' > "$work/src/AndroidManifest.xml"
 echo '<resources><string-array name="update_urls"><item>x</item></string-array></resources>' > "$work/src/res/values/arrays.xml"
 echo "versionCode: '1'" > "$work/src/apktool.yml"
 {
@@ -32,7 +32,39 @@ echo "versionCode: '1'" > "$work/src/apktool.yml"
     echo '</resources>'
 } > "$work/src/res/values/styles.xml"
 
+mkdir -p "$work/src/res/layout" "$work/src/res/drawable-night-xhdpi" "$work/src/res/drawable-xhdpi"
+echo '<public type="drawable" name="ic_close" id="0x7f0800ca" />' > "$work/src/res/values/public.xml"
+echo white > "$work/src/res/drawable-night-xhdpi/ic_close.png"
+echo black > "$work/src/res/drawable-xhdpi/ic_close.png"
+echo '<x android:inputType="textAutoComplete" android:imeOptions="actionSearch|flagNoExtractUi" />' > "$work/src/res/layout/lb_search_bar.xml"
+
 python3 -I "$HERE/tools/patch.py" "$work/src" 245801
+
+# The themes, icon and search box, in the stand-ins
+python3 -I - "$work/src/res" <<'PY'
+import re, sys
+from pathlib import Path
+res = Path(sys.argv[1])
+s = (res / "values/styles.xml").read_text()
+full = lambda t: re.search(r'name="App\.Theme\.Leanback\.%s">.*?windowFullscreen">(\w+)' % re.escape(t), s).group(1)
+if full("Player") != "true" or {full(t) for t in ("Browse", "GuidedStep", "Preferences.Base")} != {"false"}:
+    sys.exit("only the player's theme should be fullscreen")
+print("ok: only the player's theme is fullscreen")
+if (res / "drawable-xhdpi/ic_close.png").read_text() != "white\n":
+    sys.exit("the close icon is still the black one")
+print("ok: the close icon is white")
+s = (res / "layout/lb_search_bar.xml").read_text()
+if "flagNoExtractUi" in s or "textAutoComplete" in s or 'imeOptions="actionSearch"' not in s:
+    sys.exit("the search box isn't a plain text field")
+print("ok: the search box is a plain text field")
+s = (res.parent / "AndroidManifest.xml").read_text()
+if "app.cabinwright.category.ALL_MENUS" not in s.split("</activity>")[0].split("SplashActivity")[1]:
+    sys.exit("SplashActivity isn't in All Menus")
+for name in ("drawable-hdpi/menu_icon.png", "drawable-hdpi/menu_icon_dis.png", "drawable-night-hdpi/menu_icon.png", "drawable-night-hdpi/menu_icon_dis.png"):
+    if not (res / name).is_file():
+        sys.exit("missing " + name)
+print("ok: SplashActivity is in All Menus, with its icons")
+PY
 
 mkdir "$work/out"
 for d in "" 2 3; do
@@ -80,8 +112,29 @@ if "#int 30000" in m or "#int 2500" in m:
     sys.exit("createLoadControl still has the old values")
 print("ok: startup thresholds")
 m = re.search(r"Helpers\.makeActivityFullscreen2:.*?catches", text, re.S).group(0)
-if "setSystemUiVisibility" in m:
-    sys.exit("makeActivityFullscreen2 still hides the bar")
-print("ok: the bar is left alone")
+if "instance-of" not in m.split("return-void")[0] or "PlaybackActivity" not in m:
+    sys.exit("makeActivityFullscreen2 isn't limited to the player")
+print("ok: only the player hides the bar")
+m = re.search(r"VideoPlayerGlue\.onCreatePrimaryActions:.*?catches", text, re.S).group(0)
+if m.find("CloseAction") < 0 or m.find("CloseAction") > m.find("isPlayerButtonEnabled"):
+    sys.exit("the close action isn't first")
+m = re.search(r"VideoPlayerGlue\.onActionClicked:.*?catches", text, re.S).group(0)
+if "CloseAction;.close:" not in m:
+    sys.exit("the close action does nothing")
+print("ok: close action is first and closes")
+m = re.search(r"CarSource\.requestFocus:.*?catches", text, re.S).group(0)
+if "CarSource;.settle:" not in m:
+    sys.exit("no unmute after the mode change")
+m = re.search(r"CarSource\.settle:.*?catches", text, re.S).group(0)
+if m.count("postDelayed") != 3:
+    sys.exit("settle doesn't retry")
+m = re.search(r"AudioFocusManager\.abandonAudioFocusDefault:.*?catches", text, re.S).group(0)
+if not 0 <= m.find("CarSource;.cancel:") < m.find("AudioManager;.abandonAudioFocus:"):
+    sys.exit("abandoning focus doesn't cancel the unmutes")
+print("ok: unmute follows the mode change and ends with the focus")
+m = re.search(r"CloseAction\.<init>:.*?catches", text, re.S).group(0)
+if "7f0800ca" not in m:
+    sys.exit("the close action doesn't use ic_close")
+print("ok: close action uses ic_close")
 PY
 echo verified

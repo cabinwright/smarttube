@@ -15,13 +15,22 @@ capabilities. Everything is patched into the app (`tools/patch.py`).
 | Video | needs gen5-codec-patch, which adds decoders to `/system` and edits `media_codecs.xml` | ExoPlayer skips the firmware's dead codecs (patch 8), so nothing outside the app changes |
 | Sound | not handled | SmartTube becomes the Music Streaming source (patch 9); without it, the head unit mutes the app |
 | Out of park | closes, but plays on if the regulation service can't be reached | closes in that case too |
-| Status bar | hidden | stays, so the head unit's back and home work on every screen (patch 10) |
+| Status bar | hidden | stays outside the player, so the head unit's back and home work there (patch 10); the player is fullscreen |
+| Leaving a video | back key | Close button, first in the player's controls (patch 13) |
+| Unmute | not handled | after the focus grant and again after the mode change, or the source can stay muted (patches 9, 14) |
 | Start of a video | 2.5 s buffered, 30 s buffer | 1.5 s, 15 s (patch 11); a higher buffer is still in Settings |
+| All Menus | not handled | listed, with an icon in the stock style (patch 15) |
 | Updates | in-app check against its own releases | off; the store owns updates |
 | Install hooks, `depwatch` service | yes, as root | none |
 
-Search needs a keyboard, and the search box opens the system's (patch 12). Sign-in doesn't: it
-shows a code to enter on a phone. `tweaks.keyboard` is a separate pack that adds one.
+Search needs a keyboard, and the search box opens the system's (patch 12). On 32.68.2 the stock
+keyboard crashed twice in `onStartInputView` when it opened for the search box, and Android then
+stopped it. Focus stayed in the box until the user left, so this wasn't search moving focus to the
+results: that only happens after a query is submitted. The exception itself isn't in the log we
+have, and the keyboard's APK isn't in our backups. Patch 12 makes the box a plain text field in
+case its options are the trigger. That is a guess. If the keyboard still crashes, use
+`tweaks.keyboard`, a separate pack that replaces it. Sign-in needs no keyboard: it shows a code to
+enter on a phone.
 
 Formats: H.264 plays on the hardware decoder. VP9 and HEVC are reported as unsupported, because
 this package adds no decoders, so SmartTube has to pick H.264.
@@ -30,7 +39,7 @@ this package adds no decoders, so SmartTube has to pick H.264.
 
 ```sh
 tools/verify-smali.sh <upstream apk> <dir with baksmali/smali 2.5.2>   # patches against the real dex
-SMARTTUBE_KEYSTORE=... SMARTTUBE_KEY_PASS=... APKTOOL=... ./build.sh 1  # dist/cabinwright.smarttube-v32.68.1.zip
+SMARTTUBE_KEYSTORE=... SMARTTUBE_KEY_PASS=... APKTOOL=... ./build.sh 3  # dist/cabinwright.smarttube-v32.68.3.zip
 ```
 
 `build.sh` downloads the pinned upstream APK and refuses it unless both its SHA-256 and its
@@ -53,9 +62,17 @@ with a test build:
 4. With the foot on the brake: shift out of Park. SmartTube must close, whether it is playing,
    paused or in the background. Then try to open it in Drive. Do this first with the car held
    stationary; note whether the guard acts on the gear or only on moving.
-5. The status bar stays on the home screen, in search, in Settings and in the player, and its back
-   and home buttons work from each (patch 10). The player must not resize badly under the bar.
+5. Browse, search and Settings keep the status bar, and back and home work from each (patch 10).
+   The player is fullscreen: a tap shows the controls, and Close, the X at the left of the row,
+   leaves the video (patch 13). A swipe from the left edge also leaves it, and the bar should come
+   back with a swipe from its edge.
 6. On LTE, note how long a video takes to start, and whether it stalls more than it did (patch 11).
    The player's quality menu should show 360p by default.
-7. Search: the keyboard opens when the search box gets focus (patch 12). With the stock keyboard,
-   check whether it works at all before adding `tweaks.keyboard`.
+7. Search: the keyboard opens when the search box gets focus, stays up while typing, and search
+   runs from its Search key (patch 12). If it crashes, take the exception from logcat (`FATAL
+   EXCEPTION`, process `com.android.inputmethod.diopen`) before adding `tweaks.keyboard`.
+8. SmartTube is in All Menus, with its icon and label, in day and night (patch 15), and opens from
+   there.
+9. With Android Auto connected and the phone playing music: a video has sound from the start
+   (patch 14), and the phone's music comes back after Close and after the park lock. Android
+   Auto's panel may slide in when it gets the sound back; that's its own behaviour.
