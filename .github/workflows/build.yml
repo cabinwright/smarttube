@@ -1,0 +1,75 @@
+name: build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Android SDK parts
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;34.0.0" > /dev/null
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: apktool
+        run: |
+          mkdir -p "$RUNNER_TEMP/apktool"
+          curl -fsSL -o "$RUNNER_TEMP/apktool/apktool.jar" \
+            https://github.com/iBotPeaks/Apktool/releases/download/v2.12.0/apktool_2.12.0.jar
+          echo "effb69dab2f93806cafc0d232f6be32c2551b8d51c67650f575e46c016908fdd  $RUNNER_TEMP/apktool/apktool.jar" | sha256sum -c -
+          printf '#!/bin/sh\nexec java -jar "%s/apktool/apktool.jar" "$@"\n' "$RUNNER_TEMP" > "$RUNNER_TEMP/apktool/apktool"
+          chmod +x "$RUNNER_TEMP/apktool/apktool"
+          echo "APKTOOL=$RUNNER_TEMP/apktool/apktool" >> "$GITHUB_ENV"
+
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SMARTTUBE_KEYSTORE_B64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/smarttube.jks"
+          echo "SMARTTUBE_KEYSTORE=$RUNNER_TEMP/smarttube.jks" >> "$GITHUB_ENV"
+
+      # A tag v32.68.5 is revision 5 of upstream 32.68
+      - name: Version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          UPSTREAM=$(. ./smarttube.conf; echo "${UPSTREAM_TAG%s}")
+          case "$VERSION" in
+            "$UPSTREAM".*) ;;
+            *) echo "::error::tag $GITHUB_REF_NAME isn't a revision of $UPSTREAM"; exit 1 ;;
+          esac
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "REV=${VERSION##*.}" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          SMARTTUBE_KEY_PASS: ${{ secrets.SMARTTUBE_KEY_PASS }}
+        run: ./build.sh "$REV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cabinwright.smarttube-v${{ env.VERSION }}
+          path: dist/*.zip
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          NEMESIS package \`cabinwright.smarttube\` $VERSION, built from the upstream SmartTube release
+          pinned in \`smarttube.conf\` with the patches in this repo. Unofficial, and not reviewed line
+          by line. Install it from the Cabinwright store.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --title "SmartTube $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md"

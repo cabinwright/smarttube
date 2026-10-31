@@ -41,13 +41,12 @@ SMARTTUBE_KEYSTORE=... SMARTTUBE_KEY_PASS=... APKTOOL=... ./build.sh 4  # dist/c
 `build.sh` downloads the pinned upstream APK and refuses it unless both its SHA-256 and its
 signing certificate match `smarttube.conf`.
 
-Use a key of its own for this package and put its certificate digest in `smarttube.conf`.
-`SMARTTUBE_TEST_BUILD=1` allows a throwaway key while `SIGNING_CERT_SHA256` is empty.
+Releases come from a tag (`v32.68.5` is revision 5) and use this package's own key, pinned in
+`smarttube.conf`. `SMARTTUBE_TEST_BUILD=1` allows another key for a local test build.
 
-## Before the first release
+## Checking a new build
 
-The patches are checked against the dex, but none of this has run on a car yet. On a parked car,
-with a test build:
+The patches are checked against the dex, but only a car shows whether they work. On a parked car:
 
 1. SmartTube opens and loads pages (patches 1, 2).
 2. A video plays, picture first: look for `Skipping codec` in logcat (patch 8), and check that
