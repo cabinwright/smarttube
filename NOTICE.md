@@ -13,7 +13,8 @@ SHA-256 `2130b23b17ed5cfd324baec81750a2be22059212b6ee17449f21cae2cb3a60d9`.
 
 SmartTube was published under the GNU General Public License version 3 until February 2026, when
 its repository was recreated under the MIT License. So that this build is proper under either
-licence, its complete source is public, and stays public for as long as the build is offered:
+licence, the GPL's text is included (`notices/GPL-3.0.txt`) and its complete source is public, and
+stays public for as long as the build is offered:
 
 - SmartTube's source at tag `32.68s`, with its submodules at the commits that tag records:
   https://github.com/yuliskov/SmartTube/tree/32.68s
