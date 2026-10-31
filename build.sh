@@ -65,7 +65,7 @@ rm -f "$work/smarttube.apk.idsig"
 # Check the result, not just that the patch script ran
 certs=$("$BT/apksigner" verify --min-sdk-version 19 --print-certs "$work/smarttube.apk" 2>/dev/null) \
     || die "signature doesn't verify for API 19"
-if [ -n "$SIGNING_CERT_SHA256" ]; then
+if [ -z "${SMARTTUBE_TEST_BUILD:-}" ]; then
     grep -qi "certificate SHA-256 digest: $SIGNING_CERT_SHA256\$" <<< "$certs" \
         || die "signed with the wrong key (expected certificate SHA-256 $SIGNING_CERT_SHA256)"
 fi
