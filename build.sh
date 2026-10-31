@@ -78,8 +78,6 @@ urls=$("$BT/aapt" dump --values resources "$work/smarttube.apk" | python3 -I "$H
 [ -z "$urls" ] || die "update_urls is '$urls', expected nothing"
 manifest=$("$BT/aapt" dump xmltree "$work/smarttube.apk" AndroidManifest.xml)
 grep -qF 'app.cabinwright.category.ALL_MENUS' <<< "$manifest" || die "the All Menus category is missing"
-ime=$("$BT/aapt" dump xmltree "$work/smarttube.apk" res/layout/lb_search_bar.xml | grep -F 'android:imeOptions')
-grep -q '=(type 0x11)0x3$' <<< "$ime" || die "search box imeOptions aren't plain actionSearch: $ime"
 
 # Package
 python3 -I - "$HERE/package/NEMESIS.data" "$work/smarttube.apk" "$version" "$DIST/cabinwright.smarttube-v$version.zip" <<'PY'

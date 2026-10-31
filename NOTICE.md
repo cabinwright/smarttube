@@ -53,8 +53,8 @@ playback failure was found. None of its code or binaries are used here.
   white `ic_close` PNGs replace the black ones
 - `CarSource` unmutes again after the head unit's mode change, until focus is lost or abandoned
 - `ExoPlayerInitializer.createLoadControl()` uses shorter buffer durations
-- `SearchData` opens the keyboard on focus by default, and the search box in `lb_search_bar.xml`
-  is a plain text field
+- `SearchData` opens the keyboard on focus by default, and `SearchBar` doesn't set
+  `privateImeOptions`
 - `SplashActivity` is listed in Cabinwright's All Menus, with icons made for this package
 - re-signed with this project's key
 

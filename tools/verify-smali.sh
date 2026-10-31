@@ -32,15 +32,14 @@ echo "versionCode: '1'" > "$work/src/apktool.yml"
     echo '</resources>'
 } > "$work/src/res/values/styles.xml"
 
-mkdir -p "$work/src/res/layout" "$work/src/res/drawable-night-xhdpi" "$work/src/res/drawable-xhdpi"
+mkdir -p "$work/src/res/drawable-night-xhdpi" "$work/src/res/drawable-xhdpi"
 echo '<public type="drawable" name="ic_close" id="0x7f0800ca" />' > "$work/src/res/values/public.xml"
 echo white > "$work/src/res/drawable-night-xhdpi/ic_close.png"
 echo black > "$work/src/res/drawable-xhdpi/ic_close.png"
-echo '<x android:inputType="textAutoComplete" android:imeOptions="actionSearch|flagNoExtractUi" />' > "$work/src/res/layout/lb_search_bar.xml"
 
 python3 -I "$HERE/tools/patch.py" "$work/src" 245801
 
-# The themes, icon and search box, in the stand-ins
+# The themes, icon and menu entry, in the stand-ins
 python3 -I - "$work/src/res" <<'PY'
 import re, sys
 from pathlib import Path
@@ -53,10 +52,6 @@ print("ok: only the player's theme is fullscreen")
 if (res / "drawable-xhdpi/ic_close.png").read_text() != "white\n":
     sys.exit("the close icon is still the black one")
 print("ok: the close icon is white")
-s = (res / "layout/lb_search_bar.xml").read_text()
-if "flagNoExtractUi" in s or "textAutoComplete" in s or 'imeOptions="actionSearch"' not in s:
-    sys.exit("the search box isn't a plain text field")
-print("ok: the search box is a plain text field")
 s = (res.parent / "AndroidManifest.xml").read_text()
 if "app.cabinwright.category.ALL_MENUS" not in s.split("</activity>")[0].split("SplashActivity")[1]:
     sys.exit("SplashActivity isn't in All Menus")
@@ -136,5 +131,11 @@ m = re.search(r"CloseAction\.<init>:.*?catches", text, re.S).group(0)
 if "7f0800ca" not in m:
     sys.exit("the close action doesn't use ic_close")
 print("ok: close action uses ic_close")
+m = re.search(r"SearchBar\.onFinishInflate:.*?catches", text, re.S).group(0)
+if "setPrivateImeOptions" in m or "escapeNorth,voiceDismiss" in text:
+    sys.exit("the search box still sends privateImeOptions")
+if "setOnEditorActionListener" not in m:
+    sys.exit("the search box has lost its editor action listener")
+print("ok: the search box sends no privateImeOptions")
 PY
 echo verified

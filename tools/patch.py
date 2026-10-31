@@ -62,11 +62,11 @@ Patches (each fails loudly if SmartTube changed underneath it):
      High and Highest. The video default is left alone: on API 19 it is
      already 640x360 H.264.
  12. Search keyboard. The search box opens the keyboard when it gets focus, by
-     default (still a setting). The stock keyboard crashes in onStartInputView
-     for this box, so the box asks for a plain text field: inputType text,
-     imeOptions actionSearch without flagNoExtractUi. Whether that is what the
-     keyboard trips on isn't known yet; see the README. Sign-in needs no
-     keyboard: it shows a code to enter on a phone.
+     default (still a setting). SearchBar no longer sets privateImeOptions: the
+     stock keyboard splits that string into key=value pairs and calls trim() on
+     the value, so leanback's "escapeNorth,voiceDismiss", with no "=", crashes it
+     in onStartInputView. Sign-in needs no keyboard: it shows a code to enter on
+     a phone.
  13. Close button: the first action in the player's controls leaves the video,
      the same way back does. Any touch brings the controls up
      (PlaybackActivity.dispatchTouchEvent), so it can't be stranded. Its icon is
@@ -889,11 +889,15 @@ def patch_keyboard_default(root: Path) -> None:
         raise SystemExit(f"{what}: SearchData's restore changed - re-check it")
     p.write_text(pat.sub(r"\1v2\2", s, count=1), encoding="utf-8")
 
-    p = root / "res" / "layout" / "lb_search_bar.xml"
+    p = smali_file(root, "androidx/leanback/widget/SearchBar.smali", what)
     s = p.read_text(encoding="utf-8")
-    s = replace_once(s, 'android:inputType="textAutoComplete"', 'android:inputType="text"', what)
-    s = replace_once(s, 'android:imeOptions="actionSearch|flagNoExtractUi"', 'android:imeOptions="actionSearch"', what)
-    p.write_text(s, encoding="utf-8")
+    pat = re.compile(
+        r'    const-string v(\d+), "escapeNorth,voiceDismiss"\n\n(?:    \.line \d+\n)?'
+        r"    invoke-virtual \{v\d+, v\1\}, Landroidx/leanback/widget/SearchEditText;->setPrivateImeOptions\(Ljava/lang/String;\)V\n"
+    )
+    if len(pat.findall(s)) != 1:
+        raise SystemExit(f"{what}: SearchBar's setPrivateImeOptions call changed - re-check it")
+    p.write_text(pat.sub("", s, count=1), encoding="utf-8")
 
 
 def main() -> None:

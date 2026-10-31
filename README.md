@@ -23,14 +23,10 @@ capabilities. Everything is patched into the app (`tools/patch.py`).
 | Updates | in-app check against its own releases | off; the store owns updates |
 | Install hooks, `depwatch` service | yes, as root | none |
 
-Search needs a keyboard, and the search box opens the system's (patch 12). On 32.68.2 the stock
-keyboard crashed twice in `onStartInputView` when it opened for the search box, and Android then
-stopped it. Focus stayed in the box until the user left, so this wasn't search moving focus to the
-results: that only happens after a query is submitted. The exception itself isn't in the log we
-have, and the keyboard's APK isn't in our backups. Patch 12 makes the box a plain text field in
-case its options are the trigger. That is a guess. If the keyboard still crashes, use
-`tweaks.keyboard`, a separate pack that replaces it. Sign-in needs no keyboard: it shows a code to
-enter on a phone.
+Search needs a keyboard, and the search box opens the system's (patch 12). The stock keyboard
+crashed on leanback's `privateImeOptions` string, so SearchBar no longer sets it. Sign-in needs no
+keyboard: it shows a code to enter on a phone. `tweaks.keyboard` is a separate pack that adds
+another keyboard.
 
 Formats: H.264 plays on the hardware decoder. VP9 and HEVC are reported as unsupported, because
 this package adds no decoders, so SmartTube has to pick H.264.
@@ -39,7 +35,7 @@ this package adds no decoders, so SmartTube has to pick H.264.
 
 ```sh
 tools/verify-smali.sh <upstream apk> <dir with baksmali/smali 2.5.2>   # patches against the real dex
-SMARTTUBE_KEYSTORE=... SMARTTUBE_KEY_PASS=... APKTOOL=... ./build.sh 3  # dist/cabinwright.smarttube-v32.68.3.zip
+SMARTTUBE_KEYSTORE=... SMARTTUBE_KEY_PASS=... APKTOOL=... ./build.sh 4  # dist/cabinwright.smarttube-v32.68.4.zip
 ```
 
 `build.sh` downloads the pinned upstream APK and refuses it unless both its SHA-256 and its
@@ -69,8 +65,7 @@ with a test build:
 6. On LTE, note how long a video takes to start, and whether it stalls more than it did (patch 11).
    The player's quality menu should show 360p by default.
 7. Search: the keyboard opens when the search box gets focus, stays up while typing, and search
-   runs from its Search key (patch 12). If it crashes, take the exception from logcat (`FATAL
-   EXCEPTION`, process `com.android.inputmethod.diopen`) before adding `tweaks.keyboard`.
+   runs from its Search key (patch 12).
 8. SmartTube is in All Menus, with its icon and label, in day and night (patch 15), and opens from
    there.
 9. With Android Auto connected and the phone playing music: a video has sound from the start
