@@ -24,9 +24,8 @@ capabilities. Everything is patched into the app (`tools/patch.py`).
 | Install hooks, `depwatch` service | yes, as root | none |
 
 Search needs a keyboard, and the search box opens the system's (patch 12). The stock keyboard
-crashed on leanback's `privateImeOptions` string, so SearchBar no longer sets it. Sign-in needs no
-keyboard: it shows a code to enter on a phone. `tweaks.keyboard` is a separate pack that adds
-another keyboard.
+crashes on leanback's `privateImeOptions` until the Cabinwright keyboard fix is installed. Sign-in
+needs no keyboard: it shows a code to enter on a phone.
 
 Formats: H.264 plays on the hardware decoder. VP9 and HEVC are reported as unsupported, because
 this package adds no decoders, so SmartTube has to pick H.264.

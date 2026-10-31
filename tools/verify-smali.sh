@@ -132,10 +132,8 @@ if "7f0800ca" not in m:
     sys.exit("the close action doesn't use ic_close")
 print("ok: close action uses ic_close")
 m = re.search(r"SearchBar\.onFinishInflate:.*?catches", text, re.S).group(0)
-if "setPrivateImeOptions" in m or "escapeNorth,voiceDismiss" in text:
-    sys.exit("the search box still sends privateImeOptions")
 if "setOnEditorActionListener" not in m:
     sys.exit("the search box has lost its editor action listener")
-print("ok: the search box sends no privateImeOptions")
+print("ok: the search box keeps its editor action listener")
 PY
 echo verified
