@@ -15,8 +15,13 @@ capabilities. Everything is patched into the app (`tools/patch.py`).
 | Video | needs gen5-codec-patch, which adds decoders to `/system` and edits `media_codecs.xml` | ExoPlayer skips the firmware's dead codecs (patch 8), so nothing outside the app changes |
 | Sound | not handled | SmartTube becomes the Music Streaming source (patch 9); without it, the head unit mutes the app |
 | Out of park | closes, but plays on if the regulation service can't be reached | closes in that case too |
+| Status bar | hidden | stays, so the head unit's back and home work on every screen (patch 10) |
+| Start of a video | 2.5 s buffered, 30 s buffer | 1.5 s, 15 s (patch 11); a higher buffer is still in Settings |
 | Updates | in-app check against its own releases | off; the store owns updates |
 | Install hooks, `depwatch` service | yes, as root | none |
+
+Search needs a keyboard, and the search box opens the system's (patch 12). Sign-in doesn't: it
+shows a code to enter on a phone. `tweaks.keyboard` is a separate pack that adds one.
 
 Formats: H.264 plays on the hardware decoder. VP9 and HEVC are reported as unsupported, because
 this package adds no decoders, so SmartTube has to pick H.264.
@@ -48,3 +53,9 @@ with a test build:
 4. With the foot on the brake: shift out of Park. SmartTube must close, whether it is playing,
    paused or in the background. Then try to open it in Drive. Do this first with the car held
    stationary; note whether the guard acts on the gear or only on moving.
+5. The status bar stays on the home screen, in search, in Settings and in the player, and its back
+   and home buttons work from each (patch 10). The player must not resize badly under the bar.
+6. On LTE, note how long a video takes to start, and whether it stalls more than it did (patch 11).
+   The player's quality menu should show 360p by default.
+7. Search: the keyboard opens when the search box gets focus (patch 12). With the stock keyboard,
+   check whether it works at all before adding `tweaks.keyboard`.

@@ -24,6 +24,13 @@ mkdir -p "$work/src/res/values"
 echo '<manifest package="org.smarttube.stable">' > "$work/src/AndroidManifest.xml"
 echo '<resources><string-array name="update_urls"><item>x</item></string-array></resources>' > "$work/src/res/values/arrays.xml"
 echo "versionCode: '1'" > "$work/src/apktool.yml"
+{
+    echo '<resources>'
+    for t in Browse GuidedStep Player Preferences.Base; do
+        echo "<style name=\"App.Theme.Leanback.$t\"><item name=\"android:windowFullscreen\">true</item></style>"
+    done
+    echo '</resources>'
+} > "$work/src/res/values/styles.xml"
 
 python3 -I "$HERE/tools/patch.py" "$work/src" 245801
 
@@ -60,5 +67,21 @@ from pathlib import Path
 text = "".join(p.read_text(errors="replace") for p in sorted(Path(sys.argv[1]).glob("*.txt")))
 m = re.search(r"DefaultAudioSink\.initialize:\(J\)V(.*?)buildAudioTrack", text, re.S)
 sys.exit("session 29 is not set") if "#int 29" not in m.group(1) else print("ok: tracks are built on session 29")
+PY
+python3 -I - "$work/out" <<'PY'
+import re, sys
+from pathlib import Path
+text = "".join(p.read_text(errors="replace") for p in sorted(Path(sys.argv[1]).glob("*.txt")))
+m = re.search(r"ExoPlayerInitializer\.createLoadControl:.*?catches", text, re.S).group(0)
+for v in ("#int 15000", "#int 1500", "#int 3000"):
+    if v not in m:
+        sys.exit("createLoadControl lacks " + v)
+if "#int 30000" in m or "#int 2500" in m:
+    sys.exit("createLoadControl still has the old values")
+print("ok: startup thresholds")
+m = re.search(r"Helpers\.makeActivityFullscreen2:.*?catches", text, re.S).group(0)
+if "setSystemUiVisibility" in m:
+    sys.exit("makeActivityFullscreen2 still hides the bar")
+print("ok: the bar is left alone")
 PY
 echo verified

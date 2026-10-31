@@ -47,6 +47,10 @@ playback failure was found. None of its code or binaries are used here.
 - ExoPlayer's `AudioFocusManager` and `DefaultAudioSink` use a new class,
   `app.cabinwright.smarttube.CarSource`, and the head unit's Music Streaming audio session
 - `PlayerTweaksData.isAudioFocusEnabled()` always returns true
+- the themes no longer set `android:windowFullscreen`, and `Helpers.makeActivityFullscreen2()`
+  does nothing, so the system status bar stays
+- `ExoPlayerInitializer.createLoadControl()` uses shorter buffer durations
+- `SearchData` opens the keyboard on focus by default
 - re-signed with this project's key
 
 Third-party libraries inside the APK are distributed by upstream under their own licenses,

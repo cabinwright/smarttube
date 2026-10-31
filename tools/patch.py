@@ -51,6 +51,17 @@ Patches (each fails loudly if SmartTube changed underneath it):
      with mode 130, setMute(3) (also when focus comes back, since every mode
      change mutes), every track on session 29. The audio focus setting is
      forced on, since turning it off would leave SmartTube silent.
+ 10. Status bar: the head unit's back and home buttons live in its status bar,
+     which SmartTube hides twice: android:windowFullscreen in four themes, and
+     Helpers.makeActivityFullscreen2 (system UI flags). Both go, so every
+     screen, the player included, sits under the bar like any other app.
+ 11. Start sooner on a slow connection: playback starts with 1.5 s buffered
+     instead of 2.5 s, 3 s instead of 5 s after a stall, and the Medium buffer,
+     the default, is 15 s instead of 30 s. The buffer setting still offers
+     High and Highest. The video default is left alone: on API 19 it is
+     already 640x360 H.264.
+ 12. The search box opens the keyboard when it gets focus, by default. Still a
+     setting. Sign-in needs no keyboard: it shows a code to enter on a phone.
 """
 import re
 import sys
@@ -602,6 +613,64 @@ def patch_car_audio(root: Path) -> None:
     p.write_text(s, encoding="utf-8")
 
 
+def patch_status_bar(root: Path) -> None:
+    what = "status bar patch"
+    # In every qualified values folder: API 19 reads values-v19 over values.
+    style = re.compile(r'<style name="(?P<name>[^"]+)"[^>]*(?<!/)>.*?</style>', re.S)
+    full = '<item name="android:windowFullscreen">true</item>'
+    off = '<item name="android:windowFullscreen">false</item>'
+    changed = set()
+
+    def theme(g: "re.Match[str]") -> str:
+        if not g.group("name").startswith("App.Theme.") or full not in g.group(0):
+            return g.group(0)
+        changed.add(g.group("name"))
+        return g.group(0).replace(full, off)
+
+    for p in sorted(root.glob("res/values*/styles.xml")):
+        s = p.read_text(encoding="utf-8")
+        p.write_text(style.sub(theme, s), encoding="utf-8")
+    if not {"App.Theme.Leanback.Browse", "App.Theme.Leanback.Player"} <= changed:
+        raise SystemExit(f"{what}: the browse and player themes no longer set windowFullscreen ({sorted(changed)}) - SmartTube changed, re-check it")
+
+    p = smali_file(root, "com/liskovsoft/sharedutils/helpers/Helpers.smali", what)
+    s = p.read_text(encoding="utf-8")
+    pat = re.compile(r"(\.method public static makeActivityFullscreen2\(Landroid/app/Activity;\)V\n).*?(\.end method)", re.S)
+    if len(pat.findall(s)) != 1:
+        raise SystemExit(f"{what}: makeActivityFullscreen2 not found - SmartTube changed, re-check it")
+    p.write_text(pat.sub(r"\1    .locals 0\n\n    return-void\n\2", s, count=1), encoding="utf-8")
+
+
+def patch_startup(root: Path) -> None:
+    what = "startup patch"
+    p = smali_file(root, "com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.smali", what)
+    s = p.read_text(encoding="utf-8")
+    body = method(s, ".method private createLoadControl()Lcom/google/android/exoplayer2/DefaultLoadControl;", what)
+    new = body
+    for old, repl in (
+        ("    const/16 v2, 0x7530\n", "    const/16 v2, 0x3a98\n"),  # Medium: 15 s
+        ("    const/16 v1, 0x7530\n", "    const/16 v1, 0x3a98\n"),
+        ("    const/16 v3, 0x9c4\n", "    const/16 v3, 0x5dc\n"),  # to start: 1.5 s
+        ("    const/16 v4, 0x1388\n", "    const/16 v4, 0xbb8\n"),  # after a stall: 3 s
+    ):
+        new = replace_once(new, old, repl, what)
+    p.write_text(s.replace(body, new, 1), encoding="utf-8")
+
+
+def patch_keyboard_default(root: Path) -> None:
+    what = "keyboard default patch"
+    p = smali_file(root, "com/liskovsoft/smartyoutubetv2/common/prefs/SearchData.smali", what)
+    s = p.read_text(encoding="utf-8")
+    pat = re.compile(
+        r"(    const/4 v2, 0x1\n.*?const/4 v3, 0x3\n\n(?:    \.line \d+\n)?    invoke-static \{v0, v3, )v1(\}, Lcom/liskovsoft/sharedutils/helpers/Helpers;->parseBoolean\(\[Ljava/lang/String;IZ\)Z\n\n"
+        r"    move-result v3\n\n(?:    \.line \d+\n)?    iput-boolean v3, p0, Lcom/liskovsoft/smartyoutubetv2/common/prefs/SearchData;->mIsKeyboardAutoShowEnabled:Z)",
+        re.S,
+    )
+    if len(pat.findall(s)) != 1:
+        raise SystemExit(f"{what}: SearchData's restore changed - re-check it")
+    p.write_text(pat.sub(r"\1v2\2", s, count=1), encoding="utf-8")
+
+
 def main() -> None:
     root, code = Path(sys.argv[1]), int(sys.argv[2])
     patch_get_tasks(root)
@@ -613,7 +682,10 @@ def main() -> None:
     patch_driving_guard(root)
     patch_dead_codecs(root)
     patch_car_audio(root)
-    print(f"patched: GET_TASKS, Conscrypt, update check off, versionCode={code}, edge-swipe back (+ relayout fix), driving guard (fails closed), dead codecs, car audio")
+    patch_status_bar(root)
+    patch_startup(root)
+    patch_keyboard_default(root)
+    print(f"patched: GET_TASKS, Conscrypt, update check off, versionCode={code}, edge-swipe back (+ relayout fix), driving guard (fails closed), dead codecs, car audio, status bar, startup, keyboard default")
 
 
 if __name__ == "__main__":
