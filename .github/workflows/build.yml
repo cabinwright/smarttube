@@ -26,7 +26,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/apktool"
           curl -fsSL -o "$RUNNER_TEMP/apktool/apktool.jar" \
-            https://github.com/iBotPeaks/Apktool/releases/download/v2.12.0/apktool_2.12.0.jar
+            https://github.com/iBotPeaches/Apktool/releases/download/v2.12.0/apktool_2.12.0.jar
           echo "effb69dab2f93806cafc0d232f6be32c2551b8d51c67650f575e46c016908fdd  $RUNNER_TEMP/apktool/apktool.jar" | sha256sum -c -
           printf '#!/bin/sh\nexec java -jar "%s/apktool/apktool.jar" "$@"\n' "$RUNNER_TEMP" > "$RUNNER_TEMP/apktool/apktool"
           chmod +x "$RUNNER_TEMP/apktool/apktool"
